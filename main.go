@@ -72,12 +72,12 @@ func main() {
 					Label{Text: "发布时间: "},
 					LineEdit{
 						AssignTo: &mw.timeFrom,
-						Text:     "请输入发布时间范围",
+						Text:     "",
 					},
 					Label{Text: "-- "},
 					LineEdit{
 						AssignTo: &mw.timeTo,
-						Text:     "请输入发布时间范围",
+						Text:     "",
 					},
 				},
 			},
@@ -175,8 +175,22 @@ type ResultsTableModel struct {
 	items      []*ResultsTable
 }
 
+/*====================全===局===变===量======================*/
+
 // 定义全局数据集给主函数表格
-var model ResultsTableModel
+var model *ResultsTableModel
+
+//作者ID
+var AuthorID string
+
+//阅读量下限
+var Hotvalue int
+
+//时间段from
+var Timefrom time.Time
+
+//时间段Timeto
+var Timeto time.Time
 
 /*================爬===虫===入===口==========================*/
 
@@ -212,7 +226,7 @@ type Result struct {
 	Category    string
 	Title       string
 	Coverlink   string
-	Publishtime string
+	Publishtime time.Time
 	Hot         int
 }
 
@@ -241,13 +255,19 @@ func Dayu() (results []Result) {
 		result := Result{}
 		reg := regexp.MustCompile(`"click_total":(.*?),`)
 		result.Hot, _ = strconv.Atoi(reg.FindString(string(resp.Body)))
+
+		// 根据阅读量筛选
+		if result.Hot < Hotvalue {
+			return
+		}
+
 		id := resp.Request.Ctx.Get("id")
 		result.Url = fmt.Sprintf("html: http://a.mp.uc.cn/article.html?uc_param_str=frdnsnpfvecpntnwprdssskt&from=media#!wm_cid=%s", id)
 		result.Type = resp.Request.Ctx.Get("type")
 		result.Category = resp.Request.Ctx.Get("category")
 		result.Title = resp.Request.Ctx.Get("title")
 		result.Coverlink = resp.Request.Ctx.Get("coverlink")
-		result.Publishtime = resp.Request.Ctx.Get("publishtime")
+		result.Publishtime, _ = time.Parse("2006-01-02 15:04:05", resp.Request.Ctx.Get("publishtime"))
 
 		results = append(results, result)
 	})
@@ -258,6 +278,24 @@ func Dayu() (results []Result) {
 			log.Fatal(err)
 		}
 		for _, oneproduction := range productionlist.Data {
+
+			//根据发布的时间段筛选
+			changetime := strings.Replace(strings.Split(oneproduction.Publishtime, ".")[0], "T", " ", -1)
+			timeline, _ := time.Parse("2006-01-02 15:04:05", changetime)
+			if Timefrom != nil && Timeto == nil {
+				if timeline.Before(Timefrom) {
+					continue
+				}
+			} else if Timefrom == nil && Timeto != nil {
+				if Timeto.Before(timeline) {
+					continue
+				}
+			} else if Timefrom != nil && Timeto != nil {
+				if timeline.Before(Timefrom) && Timeto.Before(timeline) {
+					continue
+				}
+			}
+
 			id := oneproduction.ID
 			targetURL := fmt.Sprintf("http://ff.dayu.com/contents/%s?biz_id=1002&_fetch_author=1&_fetch_incrs=1", id)
 			ctx := colly.NewContext()
@@ -266,14 +304,15 @@ func Dayu() (results []Result) {
 			ctx.Put("category", oneproduction.Category)
 			ctx.Put("title", oneproduction.Title)
 			ctx.Put("coverlink", oneproduction.Coverlink)
-			ctx.Put("publishtime", oneproduction.Publishtime)
+			ctx.Put("publishtime", timeline)
 			getHotCollector.Request("GET", targetURL, nil, ctx, nil)
 			log.Println("Visiting: ", targetURL)
 		}
 
 	})
 
-	c.Visit("http://ff.dayu.com/contents/author/a2c99b15af2b413ea29c6ebf40b9750c?biz_id=1002")
+	visitUrl := fmt.Sprintf("http://ff.dayu.com/contents/author/%s?biz_id=1002", AuthorID)
+	c.Visit(visitUrl)
 
 	getHotCollector.Wait()
 
@@ -349,34 +388,27 @@ func NewResultsTableModel(site string, results []Result) *ResultsTableModel {
 	m := new(ResultsTableModel)
 	m.items = make([]*ResultsTable, 7)
 	for i, result := range results {
-		var (
-			protype  string
-			timeline time.Time
-		)
 
-		switch site {
-		case "dayu":
+		if site == "dayu" {
 			// 格式转换成界面表格的格式
 			if result.Type == "1001" {
-				protype := "图文"
+				result.Type = "图文"
 			} else if result.Type == "1002" {
-				protype := "视频"
+				result.Type = "视频"
 			} else if result.Type == "1005" {
-				protype := "图集"
+				result.Type = "图集"
 			} else {
-				protype := "未知类型" + result.Type
+				result.Type = "未知类型" + result.Type
 			}
-			changetime := strings.Replace(strings.Split(result.Publishtime, ".")[0], "T", " ", -1)
-			timeline, _ := time.Parse("2018-06-07 15:00:00", changetime)
 		}
 
 		m.items[i] = &ResultsTable{
 			Index:       i,
-			Type:        protype,
+			Type:        result.Type,
 			Category:    result.Category,
 			Title:       result.Title,
 			Coverlink:   result.Coverlink,
-			Publishtime: timeline,
+			Publishtime: result.Publishtime,
 			Hot:         result.Hot,
 			Srcurl:      result.Url,
 		}
@@ -393,12 +425,28 @@ func (mw *MyMainWindow) Crawler() {
 		return
 	}
 	hot := mw.hot.Text()
-	if hotvalue, err := strconv.Atoi(hot); err != nil {
+	if Hotvalue, err := strconv.Atoi(hot); err != nil {
 		walk.MsgBox(mw, "阅读量设置错误", "请填写正确的数字", walk.MsgBoxIconWarning)
 		return
 	}
-	timeFrom := mw.timeFrom.Text()
-	timeTo := mw.timeTo.Text()
+	if mw.timeFrom.Text() == "" {
+		Timefrom = nil
+	} else {
+		Timefrom, err := time.Parse("2006-01-02 15:04:05", mw.timeFrom.Text())
+		if err != nil {
+			walk.MsgBox(mw, "Time Error", "请填写正确格式的时间段(2006-01-02 15:04:05)", walk.MsgBoxIconWarning)
+			return
+		}
+	}
+	if mw.timeTo.Text() == "" {
+		Timeto = nil
+	} else {
+		Timeto, err := time.Parse("2006-01-02 15:04:05", mw.timeTo.Text())
+		if err != nil {
+			walk.MsgBox(mw, "Time Error", "请填写正确格式的时间段(2006-01-02 15:04:05)", walk.MsgBoxIconWarning)
+			return
+		}
+	}
 
 	if mw.dayu.Checked() == true {
 		//大鱼号平台爬取
@@ -426,3 +474,9 @@ func OpenBrowser(uri string) error {
 	cmd := exec.Command("rundll32 url.dll,FileProtocolHandler", uri)
 	return cmd.Start()
 }
+
+// StringtimeToTime 字符串时间转换成时间类型
+// func StringtimeToTime(t string) time.Time {
+// 	timeline, _ = time.Parse("2018-06-07 15:00:00", t)
+// 	return timeline
+// }
