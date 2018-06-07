@@ -64,20 +64,18 @@ func main() {
 						AssignTo: &mw.id,
 						Text:     "请输入作者ID",
 					},
-					Label{Text: "阅读量: "},
-					LineEdit{
+					Label{Text: "阅读量(下限): "},
+					NumberEdit{
 						AssignTo: &mw.hot,
-						Text:     "请输入阅读量下限",
+						Value:    0,
 					},
 					Label{Text: "发布时间: "},
-					LineEdit{
+					DateEdit{
 						AssignTo: &mw.timeFrom,
-						Text:     "",
 					},
 					Label{Text: "-- "},
-					LineEdit{
+					DateEdit{
 						AssignTo: &mw.timeTo,
-						Text:     "",
 					},
 				},
 			},
@@ -149,9 +147,9 @@ type MyMainWindow struct {
 	baijia   *walk.RadioButton
 	qie      *walk.RadioButton
 	id       *walk.LineEdit
-	hot      *walk.LineEdit
-	timeFrom *walk.LineEdit
-	timeTo   *walk.LineEdit
+	hot      *walk.NumberEdit
+	timeFrom *walk.DateEdit
+	timeTo   *walk.DateEdit
 }
 
 // ResultsTable 表格结构
@@ -282,31 +280,23 @@ func Dayu() (results []Result) {
 			//根据发布的时间段筛选
 			changetime := strings.Replace(strings.Split(oneproduction.Publishtime, ".")[0], "T", " ", -1)
 			timeline, _ := time.Parse("2006-01-02 15:04:05", changetime)
-			if Timefrom != nil && Timeto == nil {
-				if timeline.Before(Timefrom) {
-					continue
-				}
-			} else if Timefrom == nil && Timeto != nil {
-				if Timeto.Before(timeline) {
-					continue
-				}
-			} else if Timefrom != nil && Timeto != nil {
-				if timeline.Before(Timefrom) && Timeto.Before(timeline) {
-					continue
-				}
-			}
 
-			id := oneproduction.ID
-			targetURL := fmt.Sprintf("http://ff.dayu.com/contents/%s?biz_id=1002&_fetch_author=1&_fetch_incrs=1", id)
-			ctx := colly.NewContext()
-			ctx.Put("id", oneproduction.ID)
-			ctx.Put("type", strconv.Itoa(oneproduction.Type))
-			ctx.Put("category", oneproduction.Category)
-			ctx.Put("title", oneproduction.Title)
-			ctx.Put("coverlink", oneproduction.Coverlink)
-			ctx.Put("publishtime", timeline)
-			getHotCollector.Request("GET", targetURL, nil, ctx, nil)
-			log.Println("Visiting: ", targetURL)
+			// if timeline.Before(Timefrom) && Timeto.Before(timeline) {
+			// 	continue
+			// }
+			if (Timefrom.Before(timeline) && timeline.Before(Timeto)) || (Timeto.Before(timeline) && timeline.Before(Timefrom)) {
+				id := oneproduction.ID
+				targetURL := fmt.Sprintf("http://ff.dayu.com/contents/%s?biz_id=1002&_fetch_author=1&_fetch_incrs=1", id)
+				ctx := colly.NewContext()
+				ctx.Put("id", oneproduction.ID)
+				ctx.Put("type", strconv.Itoa(oneproduction.Type))
+				ctx.Put("category", oneproduction.Category)
+				ctx.Put("title", oneproduction.Title)
+				ctx.Put("coverlink", oneproduction.Coverlink)
+				ctx.Put("publishtime", timeline)
+				getHotCollector.Request("GET", targetURL, nil, ctx, nil)
+				log.Println("Visiting: ", targetURL)
+			}
 		}
 
 	})
@@ -424,29 +414,32 @@ func (mw *MyMainWindow) Crawler() {
 		walk.MsgBox(mw, "ID错误", "请填写正确的作者ID(*大鱼号的作者ID默认为32位*),作者ID需要与目标平台匹配", walk.MsgBoxIconWarning)
 		return
 	}
-	hot := mw.hot.Text()
-	if Hotvalue, err := strconv.Atoi(hot); err != nil {
-		walk.MsgBox(mw, "阅读量设置错误", "请填写正确的数字", walk.MsgBoxIconWarning)
-		return
-	}
-	if mw.timeFrom.Text() == "" {
-		Timefrom = nil
-	} else {
-		Timefrom, err := time.Parse("2006-01-02 15:04:05", mw.timeFrom.Text())
-		if err != nil {
-			walk.MsgBox(mw, "Time Error", "请填写正确格式的时间段(2006-01-02 15:04:05)", walk.MsgBoxIconWarning)
-			return
-		}
-	}
-	if mw.timeTo.Text() == "" {
-		Timeto = nil
-	} else {
-		Timeto, err := time.Parse("2006-01-02 15:04:05", mw.timeTo.Text())
-		if err != nil {
-			walk.MsgBox(mw, "Time Error", "请填写正确格式的时间段(2006-01-02 15:04:05)", walk.MsgBoxIconWarning)
-			return
-		}
-	}
+	Hotvalue := mw.hot.Value()
+	fmt.Println(Hotvalue)
+	// if Hotvalue, err := strconv.Atoi(hot); err != nil {
+	// 	walk.MsgBox(mw, "阅读量设置错误", "请填写正确的数字", walk.MsgBoxIconWarning)
+	// 	return
+	// }
+	// if mw.timeFrom.Text() == "" {
+	// 	Timefrom = nil
+	// } else {
+	// 	Timefrom, err := time.Parse("2006-01-02 15:04:05", mw.timeFrom.Text())
+	// 	if err != nil {
+	// 		walk.MsgBox(mw, "Time Error", "请填写正确格式的时间段(2006-01-02 15:04:05)", walk.MsgBoxIconWarning)
+	// 		return
+	// 	}
+	// }
+	// if mw.timeTo.Text() == "" {
+	// 	Timeto = nil
+	// } else {
+	// 	Timeto, err := time.Parse("2006-01-02 15:04:05", mw.timeTo.Text())
+	// 	if err != nil {
+	// 		walk.MsgBox(mw, "Time Error", "请填写正确格式的时间段(2006-01-02 15:04:05)", walk.MsgBoxIconWarning)
+	// 		return
+	// 	}
+	// }
+	Timefrom = mw.timeFrom.Date()
+	Timeto = mw.timeTo.Date()
 
 	if mw.dayu.Checked() == true {
 		//大鱼号平台爬取
