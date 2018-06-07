@@ -79,14 +79,14 @@ func main() {
 					},
 				},
 			},
-			PushButton{
-				Text:     "开始抓取",
-				MinSize:  Size{120, 30},
-				AssignTo: &mw.Start,
-			},
 			Composite{
-				Layout: Grid{Columns: 2, Spacing: 10},
+				Layout: VBox{MarginsZero: true},
 				Children: []Widget{
+					PushButton{
+						Text:     "开始抓取",
+						MinSize:  Size{120, 30},
+						AssignTo: &mw.Start,
+					},
 					TableView{
 						AssignTo:              &mw.tv,
 						AlternatingRowBGColor: walk.RGB(239, 239, 239),
