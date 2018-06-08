@@ -20,7 +20,7 @@ import (
 func main() {
 
 	mw := &MyMainWindow{}
-
+	model := NewResultsTableModel()
 	if err := (MainWindow{
 		AssignTo: &mw.MainWindow,
 		Title:    "文章采集器V1.0",
@@ -87,13 +87,15 @@ func main() {
 				Layout: VBox{MarginsZero: true},
 				Children: []Widget{
 					PushButton{
-						Text:     "开始抓取",
-						MinSize:  Size{120, 30},
-						AssignTo: &mw.Start,
+						Text: "开始抓取",
+						//MinSize:  Size{120, 30},
+						OnClicked: model.ResetRows,
 					},
 					TableView{
 						AssignTo:              &mw.tv,
 						AlternatingRowBGColor: walk.RGB(239, 239, 239),
+						CheckBoxes:            true,
+						MultiSelection:        true,
 						ColumnsOrderable:      true,
 						Columns: []TableViewColumn{
 							{Title: "#"},
@@ -101,19 +103,19 @@ func main() {
 							{Title: "分类"},
 							{Title: "标题"},
 							{Title: "封面"},
-							{Title: "时间", Format: "2006-01-02 15:04:05", Width: 150},
+							{Title: "时间"},
 							{Title: "阅读量"},
 							{Title: "链接"},
 						},
 						//TODO:加入表格风格，根据值的大小高亮显示
-						Model: mw.model,
+						Model: model,
 						OnCurrentIndexChanged: func() {
 							i := mw.tv.CurrentIndex()
 							if 0 <= i {
-								fmt.Printf("OnCurrentIndexChanged: %v\n", mw.model.items[i].Title)
+								fmt.Printf("OnCurrentIndexChanged: %v\n", model.items[i].Title)
 							}
 						},
-						OnItemActivated: mw.tv_ItemActivated,
+						// OnItemActivated: mw.tv_ItemActivated,
 					},
 					//TODO:暂时不添加网页浏览功能
 					// WebView{
@@ -126,16 +128,16 @@ func main() {
 		log.Fatal(err)
 	}
 
-	// 处理抓取状态
-	mw.Start.Clicked().Attach(func() {
-		go func() {
-			mw.Start.SetText("正在努力抓取中···")
-			mw.Start.SetEnabled(false)
-			mw.Crawler()
-			mw.Start.SetText("开始抓取")
-			mw.Start.SetEnabled(true)
-		}()
-	})
+	// // 处理抓取状态
+	// mw.start.Clicked().Attach(func() {
+	// 	go func() {
+	// 		mw.start.SetText("正在努力抓取中···")
+	// 		mw.start.SetEnabled(false)
+	// 		mw.ResetRows()
+	// 		mw.start.SetText("开始抓取")
+	// 		mw.start.SetEnabled(true)
+	// 	}()
+	// })
 
 	//初始化
 	mw.dayu.SetChecked(true)
@@ -145,10 +147,10 @@ func main() {
 // MyMainWindow 整体界面结构
 type MyMainWindow struct {
 	*walk.MainWindow
-	tv    *walk.TableView
-	model *ResultsTableModel
+	tv *walk.TableView
+	//model *ResultsTableModel
 	// wv       *walk.WebView
-	Start    *walk.PushButton
+	//start    *walk.PushButton
 	dayu     *walk.RadioButton
 	baijia   *walk.RadioButton
 	qie      *walk.RadioButton
@@ -168,6 +170,7 @@ type ResultsTable struct {
 	Publishtime time.Time
 	Hot         int
 	Srcurl      string
+	checked     bool
 }
 
 // ResultsTableModel 表格模型
@@ -349,83 +352,63 @@ func (m *ResultsTableModel) Value(row, col int) interface{} {
 	panic("Unexpected col")
 }
 
-// Sort	表格排序
+func (m *ResultsTableModel) Checked(row int) bool {
+	return m.items[row].checked
+}
+func (m *ResultsTableModel) SetChecked(row int, checked bool) error {
+	m.items[row].checked = checked
+	return nil
+}
 func (m *ResultsTableModel) Sort(col int, order walk.SortOrder) error {
 	m.sortColumn, m.sortOrder = col, order
-	sort.SliceStable(m.items, func(i, j int) bool {
-		a, b := m.items[i], m.items[j]
-		c := func(ls bool) bool {
-			if m.sortOrder == walk.SortAscending {
-				return ls
-			}
-			return !ls
-		}
-
-		switch m.sortColumn {
-		case 5:
-			return c(a.Publishtime.Before(b.Publishtime))
-		case 6:
-			return c(a.Hot < b.Hot)
-		}
-		panic("Unreachable")
-	})
-
+	sort.Stable(m)
 	return m.SorterBase.Sort(col, order)
 }
-
-func (mw *MyMainWindow) tv_ItemActivated() {
-	msg := ``
-	for _, i := range mw.tv.SelectedIndexes() {
-		msg = msg + "\n" + mw.model.items[i].Title
+func (m *ResultsTableModel) Len() int {
+	return len(m.items)
+}
+func (m *ResultsTableModel) Swap(i, j int) {
+	m.items[i], m.items[j] = m.items[j], m.items[i]
+}
+func (m *ResultsTableModel) Less(i, j int) bool {
+	a, b := m.items[i], m.items[j]
+	c := func(ls bool) bool {
+		if m.sortOrder == walk.SortAscending {
+			return ls
+		}
+		return !ls
 	}
-	walk.MsgBox(mw, "title", msg, walk.MsgBoxIconInformation)
+
+	switch m.sortColumn {
+	case 0:
+		return c(a.Index < b.Index)
+	case 1:
+		return c(a.Type < b.Type)
+	case 2:
+		return c(a.Category < b.Category)
+	case 3:
+		return c(a.Title < b.Title)
+	case 4:
+		return c(a.Coverlink < b.Coverlink)
+	case 5:
+		return c(a.Publishtime.Before(b.Publishtime))
+	case 6:
+		return c(a.Hot < b.Hot)
+	}
+	panic("Unreachable")
 }
 
-// TODO:Swap 交换列
+func NewResultsTableModel() *ResultsTableModel {
+	m := new(ResultsTableModel)
+	return m
+}
 
-// ResetRows 重置表格
-// func (m *ResultsTableModel) ResetRows() {
-
-// }
-
-// NewResultsTableModel	数据源(平台文章爬虫)
-// func NewResultsTableModel(site string, results []Result) *ResultsTable {
-// 	m := new(ResultsTableModel)
-// 	m.items = make([]*ResultsTable, 7)
-// 	for i, result := range results {
-
-// 		if site == "dayu" {
-// 			// 格式转换成界面表格的格式
-// 			if result.Type == "1001" {
-// 				result.Type = "图文"
-// 			} else if result.Type == "1002" {
-// 				result.Type = "视频"
-// 			} else if result.Type == "1005" {
-// 				result.Type = "图集"
-// 			} else {
-// 				result.Type = "未知类型" + result.Type
-// 			}
-// 		}
-
-// 		m.items[i] = &ResultsTable{
-// 			Index:       i,
-// 			Type:        result.Type,
-// 			Category:    result.Category,
-// 			Title:       result.Title,
-// 			Coverlink:   result.Coverlink,
-// 			Publishtime: result.Publishtime,
-// 			Hot:         result.Hot,
-// 			Srcurl:      result.Url,
-// 		}
-// 	}
-// 	return m
-// }
-
-// Crawler 开启爬虫后的主函数入口
-func (mw *MyMainWindow) Crawler() {
+func (m *ResultsTableModel) ResetRows() {
 	//进行参数校验
-	id := mw.id.Text()
-	if len(id) != 32 {
+	mw := &MyMainWindow{}
+	log.Println(*(&mw.id))
+	AuthorID = "a2c99b15af2b413ea29c6ebf40b9750c"
+	if len(AuthorID) != 32 {
 		walk.MsgBox(mw, "ID错误", "请填写正确的作者ID(*大鱼号的作者ID默认为32位*),作者ID需要与目标平台匹配", walk.MsgBoxIconWarning)
 		return
 	}
@@ -435,24 +418,6 @@ func (mw *MyMainWindow) Crawler() {
 		walk.MsgBox(mw, "阅读量设置错误", "请填写正确的数字", walk.MsgBoxIconWarning)
 		return
 	}
-	// if mw.timeFrom.Text() == "" {
-	// 	Timefrom = nil
-	// } else {
-	// 	Timefrom, err := time.Parse("2006-01-02 15:04:05", mw.timeFrom.Text())
-	// 	if err != nil {
-	// 		walk.MsgBox(mw, "Time Error", "请填写正确格式的时间段(2006-01-02 15:04:05)", walk.MsgBoxIconWarning)
-	// 		return
-	// 	}
-	// }
-	// if mw.timeTo.Text() == "" {
-	// 	Timeto = nil
-	// } else {
-	// 	Timeto, err := time.Parse("2006-01-02 15:04:05", mw.timeTo.Text())
-	// 	if err != nil {
-	// 		walk.MsgBox(mw, "Time Error", "请填写正确格式的时间段(2006-01-02 15:04:05)", walk.MsgBoxIconWarning)
-	// 		return
-	// 	}
-	// }
 	Timefrom = mw.timeFrom.Date()
 	Timeto = mw.timeTo.Date()
 
@@ -461,7 +426,7 @@ func (mw *MyMainWindow) Crawler() {
 		// mw.model.items = NewResultsTableModel("dayu", Dayu())
 		// // m := new(ResultsTableModel)
 		results := Dayu()
-		mw.model.items = make([]*ResultsTable, 7)
+		m.items = make([]*ResultsTable, 50000)
 		for i, result := range results {
 
 			// 格式转换成界面表格的格式
@@ -475,7 +440,7 @@ func (mw *MyMainWindow) Crawler() {
 				result.Type = "未知类型" + result.Type
 			}
 
-			mw.model.items[i] = &ResultsTable{
+			m.items[i] = &ResultsTable{
 				Index:       i,
 				Type:        result.Type,
 				Category:    result.Category,
@@ -486,8 +451,8 @@ func (mw *MyMainWindow) Crawler() {
 				Srcurl:      result.Url,
 			}
 		}
-		mw.model.PublishRowsReset()
-		mw.tv.SetSelectedIndexes([]int{})
+		m.PublishRowsReset()
+		m.Sort(m.sortColumn, m.sortOrder)
 	}
 
 	if mw.baijia.Checked() == true {
@@ -502,6 +467,88 @@ func (mw *MyMainWindow) Crawler() {
 		return
 	}
 }
+
+// Crawler 开启爬虫后的主函数入口
+// func (mw *MyMainWindow) Crawler() {
+// 	//进行参数校验
+// 	id := mw.id.Text()
+// 	if len(id) != 32 {
+// 		walk.MsgBox(mw, "ID错误", "请填写正确的作者ID(*大鱼号的作者ID默认为32位*),作者ID需要与目标平台匹配", walk.MsgBoxIconWarning)
+// 		return
+// 	}
+// 	Hotvalue := mw.hot.Text()
+// 	//hot := mw.hot.Text()
+// 	if _, err := strconv.Atoi(Hotvalue); err != nil {
+// 		walk.MsgBox(mw, "阅读量设置错误", "请填写正确的数字", walk.MsgBoxIconWarning)
+// 		return
+// 	}
+// 	// if mw.timeFrom.Text() == "" {
+// 	// 	Timefrom = nil
+// 	// } else {
+// 	// 	Timefrom, err := time.Parse("2006-01-02 15:04:05", mw.timeFrom.Text())
+// 	// 	if err != nil {
+// 	// 		walk.MsgBox(mw, "Time Error", "请填写正确格式的时间段(2006-01-02 15:04:05)", walk.MsgBoxIconWarning)
+// 	// 		return
+// 	// 	}
+// 	// }
+// 	// if mw.timeTo.Text() == "" {
+// 	// 	Timeto = nil
+// 	// } else {
+// 	// 	Timeto, err := time.Parse("2006-01-02 15:04:05", mw.timeTo.Text())
+// 	// 	if err != nil {
+// 	// 		walk.MsgBox(mw, "Time Error", "请填写正确格式的时间段(2006-01-02 15:04:05)", walk.MsgBoxIconWarning)
+// 	// 		return
+// 	// 	}
+// 	// }
+// 	Timefrom = mw.timeFrom.Date()
+// 	Timeto = mw.timeTo.Date()
+
+// 	if mw.dayu.Checked() == true {
+// 		//大鱼号平台爬取
+// 		// mw.model.items = NewResultsTableModel("dayu", Dayu())
+// 		// // m := new(ResultsTableModel)
+// 		results := Dayu()
+// 		mw.model.items = make([]*ResultsTable, 7)
+// 		for i, result := range results {
+
+// 			// 格式转换成界面表格的格式
+// 			if result.Type == "1001" {
+// 				result.Type = "图文"
+// 			} else if result.Type == "1002" {
+// 				result.Type = "视频"
+// 			} else if result.Type == "1005" {
+// 				result.Type = "图集"
+// 			} else {
+// 				result.Type = "未知类型" + result.Type
+// 			}
+
+// 			mw.model.items[i] = &ResultsTable{
+// 				Index:       i,
+// 				Type:        result.Type,
+// 				Category:    result.Category,
+// 				Title:       result.Title,
+// 				Coverlink:   result.Coverlink,
+// 				Publishtime: result.Publishtime,
+// 				Hot:         result.Hot,
+// 				Srcurl:      result.Url,
+// 			}
+// 		}
+// 		mw.model.PublishRowsReset()
+// 		mw.tv.SetSelectedIndexes([]int{})
+// 	}
+
+// 	if mw.baijia.Checked() == true {
+// 		//百家号平台爬虫(暂不支持)
+// 		walk.MsgBox(mw, "Sorry", "百家号平台爬虫暂不支持,请选择大鱼号平台", walk.MsgBoxIconInformation)
+// 		return
+// 	}
+
+// 	if mw.qie.Checked() == true {
+// 		//企鹅号平台爬虫(暂不支持)
+// 		walk.MsgBox(mw, "Sorry", "企鹅号平台爬虫暂不支持,请选择大鱼号平台", walk.MsgBoxIconInformation)
+// 		return
+// 	}
+// }
 
 /*================辅助工具======================*/
 
