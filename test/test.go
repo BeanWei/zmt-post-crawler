@@ -20,7 +20,7 @@ import (
 func main() {
 
 	mw := &MyMainWindow{}
-	model := NewResultsTableModel()
+	//model := NewResultsTableModel()
 	if err := (MainWindow{
 		AssignTo: &mw.MainWindow,
 		Title:    "文章采集器V1.0",
@@ -89,7 +89,7 @@ func main() {
 					PushButton{
 						Text: "开始抓取",
 						//MinSize:  Size{120, 30},
-						OnClicked: model.ResetRows,
+						OnClicked: &mw.ResetRows,
 					},
 					TableView{
 						AssignTo:              &mw.tv,
@@ -108,11 +108,11 @@ func main() {
 							{Title: "链接"},
 						},
 						//TODO:加入表格风格，根据值的大小高亮显示
-						Model: model,
+						Model: &mw.model,
 						OnCurrentIndexChanged: func() {
 							i := mw.tv.CurrentIndex()
 							if 0 <= i {
-								fmt.Printf("OnCurrentIndexChanged: %v\n", model.items[i].Title)
+								fmt.Printf("OnCurrentIndexChanged: %v\n", &mw.model.items[i].Title)
 							}
 						},
 						// OnItemActivated: mw.tv_ItemActivated,
@@ -147,17 +147,17 @@ func main() {
 // MyMainWindow 整体界面结构
 type MyMainWindow struct {
 	*walk.MainWindow
-	tv *walk.TableView
-	//model *ResultsTableModel
+	tv    *walk.TableView
+	model *ResultsTableModel
 	// wv       *walk.WebView
-	//start    *walk.PushButton
-	dayu     *walk.RadioButton
-	baijia   *walk.RadioButton
-	qie      *walk.RadioButton
-	id       *walk.LineEdit
-	hot      *walk.LineEdit
-	timeFrom *walk.DateEdit
-	timeTo   *walk.DateEdit
+	ResetRows *walk.PushButton
+	dayu      *walk.RadioButton
+	baijia    *walk.RadioButton
+	qie       *walk.RadioButton
+	id        *walk.LineEdit
+	hot       *walk.LineEdit
+	timeFrom  *walk.DateEdit
+	timeTo    *walk.DateEdit
 }
 
 // ResultsTable 表格结构
@@ -403,11 +403,11 @@ func NewResultsTableModel() *ResultsTableModel {
 	return m
 }
 
-func (m *ResultsTableModel) ResetRows() {
+func (mw *MyMainWindow) ResetRows() {
 	//进行参数校验
-	mw := &MyMainWindow{}
-	log.Println(*(&mw.id))
-	AuthorID = "a2c99b15af2b413ea29c6ebf40b9750c"
+	AuthorID = mw.id.Text()
+	log.Println(AuthorID)
+	//AuthorID = "a2c99b15af2b413ea29c6ebf40b9750c"
 	if len(AuthorID) != 32 {
 		walk.MsgBox(mw, "ID错误", "请填写正确的作者ID(*大鱼号的作者ID默认为32位*),作者ID需要与目标平台匹配", walk.MsgBoxIconWarning)
 		return
@@ -420,13 +420,13 @@ func (m *ResultsTableModel) ResetRows() {
 	}
 	Timefrom = mw.timeFrom.Date()
 	Timeto = mw.timeTo.Date()
-
+	//m := mw.model
 	if mw.dayu.Checked() == true {
 		//大鱼号平台爬取
 		// mw.model.items = NewResultsTableModel("dayu", Dayu())
 		// // m := new(ResultsTableModel)
 		results := Dayu()
-		m.items = make([]*ResultsTable, 50000)
+		mw.model.items = make([]*ResultsTable, 50000)
 		for i, result := range results {
 
 			// 格式转换成界面表格的格式
@@ -440,7 +440,7 @@ func (m *ResultsTableModel) ResetRows() {
 				result.Type = "未知类型" + result.Type
 			}
 
-			m.items[i] = &ResultsTable{
+			mw.model.items[i] = &ResultsTable{
 				Index:       i,
 				Type:        result.Type,
 				Category:    result.Category,
@@ -451,8 +451,8 @@ func (m *ResultsTableModel) ResetRows() {
 				Srcurl:      result.Url,
 			}
 		}
-		m.PublishRowsReset()
-		m.Sort(m.sortColumn, m.sortOrder)
+		mw.model.PublishRowsReset()
+		mw.model.Sort(mw.model.sortColumn, mw.model.sortOrder)
 	}
 
 	if mw.baijia.Checked() == true {
