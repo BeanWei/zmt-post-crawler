@@ -42,16 +42,19 @@ type ResultsTableModel struct {
 // MyMainWindow 整体界面结构
 type MyMainWindow struct {
 	*walk.MainWindow
-	tv       *walk.TableView
-	model    *ResultsTableModel
-	start    *walk.PushButton
-	dayu     *walk.RadioButton
-	baijia   *walk.RadioButton
-	qie      *walk.RadioButton
-	id       *walk.LineEdit
-	hot      *walk.LineEdit
-	timeFrom *walk.DateEdit
-	timeTo   *walk.DateEdit
+	tv        *walk.TableView
+	model     *ResultsTableModel
+	start     *walk.PushButton
+	dayu      *walk.RadioButton
+	baijia    *walk.RadioButton
+	qie       *walk.RadioButton
+	sharelink *walk.LineEdit
+	getID     *walk.PushButton
+	idvalue   *walk.LineEdit
+	id        *walk.LineEdit
+	hot       *walk.LineEdit
+	timeFrom  *walk.DateEdit
+	timeTo    *walk.DateEdit
 }
 
 func NewResultsTableModel() *ResultsTableModel {
@@ -177,6 +180,22 @@ func main() {
 				},
 			},
 			Composite{
+				Layout: HBox{},
+				Children: []Widget{
+					LineEdit{
+						AssignTo: &mw.sharelink,
+						Text:     "输入分享链接",
+					},
+					PushButton{
+						Text:     "解析作者ID",
+						AssignTo: &mw.getID,
+					},
+					LineEdit{
+						AssignTo: &mw.idvalue,
+					},
+				},
+			},
+			Composite{
 				MaxSize: Size{0, 50},
 				Layout:  HBox{},
 				Children: []Widget{
@@ -266,6 +285,18 @@ func main() {
 		mw.Spider()
 		mw.start.SetText("开始抓取")
 		mw.start.SetEnabled(true)
+
+	})
+
+	// 处理作者ID获取状态
+	mw.getID.Clicked().Attach(func() {
+
+		mw.idvalue.SetText("")
+		mw.getID.SetText("正在努力解析中···")
+		mw.getID.SetEnabled(false)
+		mw.getAuthorID()
+		mw.getID.SetText("解析作者ID")
+		mw.getID.SetEnabled(true)
 
 	})
 
@@ -404,8 +435,19 @@ func Dayu(AuthorID, Hotvalue, Timefrom, Timeto string) (results []Result) {
 	getHotCollector := c.Clone()
 	getHotCollector.OnResponse(func(resp *colly.Response) {
 		result := Result{}
-		reg := regexp.MustCompile(`"click_total":(.*?),`)
-		result.Hot, _ = strconv.Atoi(reg.FindString(string(resp.Body)))
+		//TODO:分析最符合的阅读量
+		// reg := regexp.MustCompile(`"click_total":(.*?),`)
+		// result.Hot, _ = strconv.Atoi(reg.FindString(string(resp.Body)))
+		reg1 := regexp.MustCompile(`"click1":(.*?)`)
+		reg2 := regexp.MustCompile(`"click2":(.*?),`)
+		reg3 := regexp.MustCompile(`"click3":(.*?),`)
+		c1, err := strconv.Atoi(reg1.FindStringSubmatch(string(resp.Body))[1])
+		c2, err := strconv.Atoi(reg2.FindStringSubmatch(string(resp.Body))[1])
+		c3, err := strconv.Atoi(reg3.FindStringSubmatch(string(resp.Body))[1])
+		if err != nil {
+			log.Fatal(err)
+		}
+		result.Hot = c1 + c2 + c3
 
 		id := resp.Request.Ctx.Get("id")
 		result.Url = fmt.Sprintf("html: http://a.mp.uc.cn/article.html?uc_param_str=frdnsnpfvecpntnwprdssskt&from=media#!wm_cid=%s", id)
@@ -467,6 +509,42 @@ func Dayu(AuthorID, Hotvalue, Timefrom, Timeto string) (results []Result) {
 	log.Println(len(results))
 	return
 
+}
+
+/*============提===取===作====者=====ID==========*/
+
+func (mw *MyMainWindow) getAuthorID() {
+	sharelink := mw.sharelink.Text()
+	if len(sharelink) == 0 {
+		walk.MsgBox(mw, "错误", "请填写图文分享连接后再进行操作", walk.MsgBoxIconWarning)
+		return
+	}
+
+	if mw.dayu.Checked() == true {
+
+		reg := regexp.MustCompile(`wm_id=(.*?)&title_type`)
+		rF := reg.FindStringSubmatch(sharelink)
+		if len(rF) == 2 {
+			theid := rF[1]
+			mw.idvalue.SetText(theid)
+		} else {
+			walk.MsgBox(mw, "错误", "请填写对应平台的图文分享链接", walk.MsgBoxIconWarning)
+			return
+		}
+
+	} else if mw.baijia.Checked() == true {
+
+		//百家号平台爬虫(暂不支持)
+		walk.MsgBox(mw, "Sorry", "百家号平台爬虫暂不支持,请选择大鱼号平台", walk.MsgBoxIconInformation)
+		return
+
+	} else if mw.qie.Checked() == true {
+
+		//企鹅号平台爬虫(暂不支持)
+		walk.MsgBox(mw, "Sorry", "企鹅号平台爬虫暂不支持,请选择大鱼号平台", walk.MsgBoxIconInformation)
+		return
+
+	}
 }
 
 /*============辅===助===函===数==============*/
