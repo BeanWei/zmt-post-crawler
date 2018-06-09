@@ -235,15 +235,25 @@ func main() {
 					PushButton{
 						Text: "查看(勾选列表索引)",
 						OnClicked: func() {
-							viewindex := mw.tv.SelectedIndexes()
-							log.Println(viewindex)
-							if len(viewindex) == 0 {
-								walk.MsgBox(mw, "错误操作", "请先勾选索引然后点击查看,程序会调用默认浏览器直接跳转对应的页面", walk.MsgBoxIconWarning)
-								return
+
+							for index, item := range mw.model.items {
+								if item.checked {
+									viewUrl := mw.model.items[index].Srcurl
+									log.Println(viewUrl)
+									cmd := exec.Command("rundll32 url.dll,FileProtocolHandler", viewUrl)
+									cmd.Start()
+								}
 							}
-							viewUrl := mw.model.items[viewindex[0]].Srcurl
-							cmd := exec.Command("rundll32 url.dll,FileProtocolHandler", viewUrl)
-							cmd.Start()
+
+							// viewindex := mw.tv.SelectedIndexes()
+							// log.Println(viewindex)
+							// if len(viewindex) == 0 {
+							// 	walk.MsgBox(mw, "错误操作", "请先勾选索引然后点击查看,程序会调用默认浏览器直接跳转对应的页面", walk.MsgBoxIconWarning)
+							// 	return
+							// }
+							// viewUrl := mw.model.items[viewindex[0]].Srcurl
+							// cmd := exec.Command("rundll32 url.dll,FileProtocolHandler", viewUrl)
+							// cmd.Start()
 						},
 					},
 				},

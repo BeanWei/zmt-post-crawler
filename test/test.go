@@ -175,10 +175,17 @@ func main() {
 			PushButton{
 				Text: "查询",
 				OnClicked: func() {
-					viewindex := tv.SelectedIndexes()
-					log.Println(viewindex)
-					viewUrl := model.items[viewindex[0]].Bar
-					log.Println(viewUrl)
+					for index, item := range model.items {
+						if item.checked {
+							viewUrl := model.items[index].Bar
+							log.Println(viewUrl)
+						}
+					}
+					// }
+					// viewindex := tv.SelectedIndexes()
+					// log.Println(viewindex)
+					// viewUrl := model.items[viewindex[0]].Bar
+					// log.Println(viewUrl)
 				},
 			},
 			TableView{
