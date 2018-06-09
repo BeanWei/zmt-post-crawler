@@ -4,11 +4,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"os"
 	"os/exec"
 	"regexp"
 	"sort"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/gocolly/colly"
@@ -146,10 +148,26 @@ func main() {
 
 	mw := &MyMainWindow{model: NewResultsTableModel()}
 	if err := (MainWindow{
+		Icon:     "lib/main.ico",
 		AssignTo: &mw.MainWindow,
-		Title:    "文章采集器V1.0",
+		Title:    "自媒体采集器V1.0",
 		MinSize:  Size{1000, 400},
-		Layout:   VBox{},
+
+		MenuItems: []MenuItem{
+			Menu{
+				Text: "帮助(H)",
+				Items: []MenuItem{
+					Action{
+						Text: "关于(A)",
+						OnTriggered: func() {
+							walk.MsgBox(mw, "自媒体采集器V1.0", "作者：Bean.Wei\n版本：Version1.0\n完成时间：2018/06/09\n申明：此软件仅供娱乐，勿用做任何商业用途！", walk.MsgBoxIconQuestion)
+						},
+					},
+				},
+			},
+		},
+
+		Layout: VBox{},
 		Children: []Widget{
 			Composite{
 				Layout: HBox{},
@@ -239,9 +257,14 @@ func main() {
 							for index, item := range mw.model.items {
 								if item.checked {
 									viewUrl := mw.model.items[index].Srcurl
-									log.Println(viewUrl)
-									cmd := exec.Command("rundll32 url.dll,FileProtocolHandler", viewUrl)
+									cmd := exec.Command("cmd", "/C", "rundll32 url.dll,FileProtocolHandler", viewUrl)
+									// if err := cmd.Run(); err != nil {
+									// 	log.Fatal(err)
+									// }
+									cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+									cmd.Stdout = os.Stdout
 									cmd.Start()
+									cmd.Wait()
 								}
 							}
 
@@ -316,6 +339,15 @@ func main() {
 }
 
 func (mw *MyMainWindow) Spider() {
+
+	//清空数据
+	if len(mw.model.items) != 0 {
+		items := []*ResultsTable{}
+		mw.model.items = items
+		mw.model.PublishRowsReset()
+		mw.tv.SetSelectedIndexes([]int{})
+	}
+
 	AuthorID := mw.id.Text()
 	log.Println(AuthorID)
 	if len(AuthorID) != 32 {
@@ -340,12 +372,10 @@ func (mw *MyMainWindow) Spider() {
 		if len(results) == 0 {
 			walk.MsgBox(mw, "结束", "没有找到符合要求的数据，请重新选择", walk.MsgBoxIconInformation)
 			return
-		} else {
-			walk.MsgBox(mw, "结束", "数据已获取成功", walk.MsgBoxIconInformation)
 		}
 
-		m := new(ResultsTableModel)
-		m.items = make([]*ResultsTable, len(results))
+		// m := new(ResultsTableModel)
+		// m.items = make([]*ResultsTable, len(results))
 		for i, result := range results {
 
 			// 格式转换成界面表格的格式
@@ -378,6 +408,8 @@ func (mw *MyMainWindow) Spider() {
 			mw.model.Sort(mw.model.sortColumn, mw.model.sortOrder)
 			mw.tv.SetSelectedIndexes([]int{})
 		}
+
+		walk.MsgBox(mw, "结束", "数据已获取成功", walk.MsgBoxIconInformation)
 
 	}
 
@@ -460,7 +492,7 @@ func Dayu(AuthorID, Hotvalue, Timefrom, Timeto string) (results []Result) {
 		result.Hot = c1 + c2 + c3
 
 		id := resp.Request.Ctx.Get("id")
-		result.Url = fmt.Sprintf("html: http://a.mp.uc.cn/article.html?uc_param_str=frdnsnpfvecpntnwprdssskt&from=media#!wm_cid=%s", id)
+		result.Url = fmt.Sprintf("http://a.mp.uc.cn/article.html?wm_cid=%s", id)
 		result.Type = resp.Request.Ctx.Get("type")
 		result.Category = resp.Request.Ctx.Get("category")
 		result.Title = resp.Request.Ctx.Get("title")
@@ -532,7 +564,7 @@ func (mw *MyMainWindow) getAuthorID() {
 
 	if mw.dayu.Checked() == true {
 
-		reg := regexp.MustCompile(`wm_id=(.*?)&title_type`)
+		reg := regexp.MustCompile(`wm_id=(.*?)&`)
 		rF := reg.FindStringSubmatch(sharelink)
 		if len(rF) == 2 {
 			theid := rF[1]
