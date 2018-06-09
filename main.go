@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"os/exec"
 	"regexp"
 	"sort"
 	"strconv"
@@ -132,6 +133,8 @@ func (m *ResultsTableModel) Less(i, j int) bool {
 		return c(a.Publishtime.Before(b.Publishtime))
 	case 6:
 		return c(a.Hot < b.Hot)
+	case 7:
+		return c(a.Srcurl < b.Srcurl)
 	}
 	panic("Unreachable")
 }
@@ -203,26 +206,45 @@ func main() {
 				},
 			},
 			Composite{
-				Layout: VBox{MarginsZero: true},
+				Layout: HBox{},
 				Children: []Widget{
 					PushButton{
 						Text: "开始抓取",
 						//MinSize:  Size{120, 30},
 						AssignTo: &mw.start,
 					},
+					PushButton{
+						Text: "查看(勾选列表索引)",
+						OnClicked: func() {
+							viewindex := mw.tv.SelectedIndexes()
+							log.Println(viewindex)
+							if len(viewindex) == 0 {
+								walk.MsgBox(mw, "错误操作", "请先勾选索引然后点击查看,程序会调用默认浏览器直接跳转对应的页面", walk.MsgBoxIconWarning)
+								return
+							}
+							viewUrl := mw.model.items[viewindex[0]].Srcurl
+							cmd := exec.Command("rundll32 url.dll,FileProtocolHandler", viewUrl)
+							cmd.Start()
+						},
+					},
+				},
+			},
+			Composite{
+				Layout: VBox{MarginsZero: true},
+				Children: []Widget{
 					TableView{
 						AssignTo:              &mw.tv,
 						AlternatingRowBGColor: walk.RGB(239, 239, 239),
 						CheckBoxes:            true,
-						//MultiSelection:        true,
-						ColumnsOrderable: true,
+						ColumnsOrderable:      true,
+						LastColumnStretched:   true,
 						Columns: []TableViewColumn{
 							{Title: "#"},
 							{Title: "类型"},
 							{Title: "分类"},
 							{Title: "标题"},
 							{Title: "封面"},
-							{Title: "时间"},
+							{Title: "时间", Format: "2006-01-02 15:04:05", Width: 150},
 							{Title: "阅读量"},
 							{Title: "链接"},
 						},
@@ -277,6 +299,8 @@ func (mw *MyMainWindow) Spider() {
 		if len(results) == 0 {
 			walk.MsgBox(mw, "结束", "没有找到符合要求的数据，请重新选择", walk.MsgBoxIconInformation)
 			return
+		} else {
+			walk.MsgBox(mw, "结束", "数据已获取成功", walk.MsgBoxIconInformation)
 		}
 
 		m := new(ResultsTableModel)
@@ -295,9 +319,10 @@ func (mw *MyMainWindow) Spider() {
 			}
 
 			pt, _ := time.Parse("2006-01-02 15:04:05", result.Publishtime)
+			log.Println(pt)
 			// nt, _ := strconv.Atoi(result.Hot)
 
-			m.items[i] = &ResultsTable{
+			mw.model.items = append(mw.model.items, &ResultsTable{
 				Index:       i,
 				Type:        result.Type,
 				Category:    result.Category,
@@ -306,11 +331,13 @@ func (mw *MyMainWindow) Spider() {
 				Publishtime: pt,
 				Hot:         result.Hot,
 				Srcurl:      result.Url,
-			}
+			})
 
+			mw.model.PublishRowsReset()
+			mw.model.Sort(mw.model.sortColumn, mw.model.sortOrder)
+			mw.tv.SetSelectedIndexes([]int{})
 		}
-		m.PublishRowsReset()
-		m.Sort(m.sortColumn, m.sortOrder)
+
 	}
 
 	if mw.baijia.Checked() == true {
