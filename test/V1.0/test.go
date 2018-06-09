@@ -501,7 +501,7 @@ func Dayu(AuthorID, Hotvalue, Timefrom, Timeto string) (results []Result) {
 
 	})
 
-	visitUrl := fmt.Sprintf("http://ff.dayu.com/contents/author/%s?biz_id=1002", AuthorID)
+	visitUrl := fmt.Sprintf("http://ff.dayu.com/contents/author/%s?biz_id=1002&_size=1000000", AuthorID)
 	c.Visit(visitUrl)
 
 	getHotCollector.Wait()
